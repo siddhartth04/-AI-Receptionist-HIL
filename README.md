@@ -11,11 +11,10 @@ The system is built on three main components:
 
 1.  The Agent (`livekit/agent.py`): A fully voice-enabled LiveKit agent that handles real-time conversation using OpenAI STT and the free Silero TTS engine.
 
-![LiveKit Agent Listening](agent-demo.png)
-
+   ![LiveKit Agent Listening](agent-demo.png.png)
 2.  The Backend (`backend/app.py`): FastAPI server that acts as the "brain," managing the knowledge base, request lifecycle (pending, resolved, timed-out), and serving the supervisor's admin panel.
 
-![FastAPI Backend Documentation](backend-demo.png)
+   ![FastAPI Backend Documentation](backend-demo.png.png)
 
 3.  The Database (`backend/data.json`): A simple `TinyDB` file used as a lightweight, zero-setup database for the `knowledge_base` and `requests` tables
 
