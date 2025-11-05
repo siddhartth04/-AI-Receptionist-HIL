@@ -27,109 +27,117 @@ The system is built on three main components:
 
 Here’s how to get the project running on your local machine.
 
- 1. Clone & Set Up Virtual Environment (Python 3.10)
+ ### 1. Clone & Set Up Virtual Environment (Python 3.10)
 
 This project requires **Python 3.10** for compatibility with the required libraries.
 
+ 
+### Clone the repository
 ```bash
-# Clone the repository
 git clone [your-repo-url]
 cd frontdesk-hil
+```
 
-# Create a Python 3.10 virtual environment
+### Create a Python 3.10 virtual environment
+```bash
 py -3.10 -m venv venv
+```
 
-# Activate the environment
-# On Windows:
+### Activate the environment
+### On Windows:
+```bash
 .\venv\Scripts\activate
-# On macOS/Linux:
+```
+### On macOS/Linux:
+```bash
 source venv/bin/activate
+```
 
-2. Install Dependencies
+### 2. Install Dependencies
 All required packages are in one command:
---> "pip install "livekit-agents[openai]==1.2.17" livekit-plugins-silero python-dotenv requests fastapi uvicorn tinydb pydantic python-multipart".
+```bash
+   "pip install "livekit-agents[openai]==1.2.17" livekit-plugins-silero python-dotenv requests fastapi uvicorn tinydb pydantic python-multipart".
+```
 
-3.Set Up Environment
+### 3.Set Up Environment
 This project requires an OpenAI API key for the Speech-to-Text (STT) functionality.
 Create a .env file in the root directory.
 Add your OpenAI key. The file should look like this:
---> OPENAI_API_KEY=sk-xxxxXXXXXXXXXXXXXX
-BACKEND_BASE=[http://127.0.0.1:8000](http://127.0.0.1:8000)
+```bash
+   OPENAI_API_KEY=sk-xxxxXXXXXXXXXXXXXX
+   BACKEND_BASE=[http://127.0.0.1:8000](http://127.0.0.1:8000)
+```
 
-4.Run the System (in 2 Terminals!)
+### 4.Run the System (in 2 Terminals!)
 You'll need two separate terminals running at the same time.
 
 Terminal A: Run the Backend
 This starts the FastAPI server that manages all the logic.
-
- -->uvicorn backend.app:app --reload
-📍 Supervisor Panel: http://127.0.0.1:8000/requests
+```bash
+    uvicorn backend.app:app --reload
+    Supervisor Panel: http://127.0.0.1:8000/requests
+```
 
 Terminal B: Run the Agent
 This connects the AI agent to your LiveKit room.
 
-# Use any room name you like
- -->python livekit/agent.py connect --room frontdesk-demo
-📍 Caller Sandbox: https://frontdesk-demo.sandbox.livekit.io
+### Use any room name you like
+```bash
+    python livekit/agent.py connect --room frontdesk-demo
+    Caller Sandbox: https://frontdesk-demo.sandbox.livekit.io
+```
 
 
-#My Design Philosophy & Decisions
-Here's a breakdown of the key design decisions I made and the trade-offs I considered while building this project.
+ ---
 
-1. How "Help Requests" are Modeled
-I chose TinyDB for its simplicity, splitting the data into knowledge and requests. The requests table is the heart of the HITL flow. I designed its schema to be clean and to track the full lifecycle of a customer's question:
+## 💡 Design & Architecture
 
-request_id (str): A uuid to uniquely link the request from creation to resolution.
+Here is a brief overview of the key architectural decisions for this project.
 
-caller_id (str): The participant identity from LiveKit. This is crucial for knowing who to text back.
+### 1. Help Request Model
 
-question (str): The final, transcribed question from the user.
+Help requests are modeled in TinyDB using a `requests` table. The schema is designed to track the full lifecycle of a customer's query:
 
-status (str): Manages the lifecycle. Can be pending, resolved, or unresolved.
+* **`request_id` (str):** A `uuid` to uniquely link the request from creation to resolution.
+* **`caller_id` (str):** The participant identity from LiveKit, used for callbacks.
+* **`question` (str):** The final, transcribed question from the user.
+* **`status` (str):** Manages the lifecycle (`pending`, `resolved`, or `unresolved`).
+* **`created_at` (str):** An ISO timestamp used to check for timeouts.
+* **`answer` (str, optional):** The answer provided by the supervisor.
 
-created_at (str): An ISO timestamp. This is essential for handling timeouts.
+### 2. Knowledge Base Updates
 
-answer (str, optional): The answer provided by the supervisor upon resolution.
+To ensure data integrity, the `knowledge_base` is only updated *after* a supervisor submits a new answer. This prevents the AI from learning from unverified sources.
 
-2. How the Knowledge Base is Updated
-My philosophy here was "safety first." The knowledge base should only contain human-vetted information.
+### 3. Supervisor Timeout Handling
 
-Therefore, the knowledge_base is only updated after a supervisor successfully submits an answer via the POST /resolve endpoint. This prevents the AI from learning from its own (or other) unverified sources and ensures the quality of its "memory".
+To avoid a complex background worker, timeouts are handled on page load. When the supervisor opens the `/requests` UI, the backend checks for any `pending` requests older than 2 hours and automatically marks them as `unresolved`. This is a simple and stateless solution.
 
-3. How Supervisor Timeouts are Handled
-The system needed to handle requests that are never answered. I wanted an elegant solution that didn't require a complex background worker or scheduler.
+### 4. Scaling Considerations
 
-My solution is to handle timeouts gracefully on page load.
+The current TinyDB (a single JSON file) is a bottleneck. To handle real scale, the architecture would be updated:
 
-Every time the supervisor visits the /requests UI, the backend first does a quick check on all pending requests. It compares their created_at timestamp against a 2-hour threshold. Any request that is too old is automatically marked as status: 'unresolved' and moved to the "Unresolved" section in the UI. This is a simple, stateless, and effective way to meet the requirement.
+* **Database:** Replace TinyDB with a production-grade database like `DynamoDB` or a managed `PostgreSQL (AWS RDS)`.
+* **Decouple with a Message Queue:** Replace the direct HTTP call with a message queue (like `AWS SQS`). The agent would publish to the queue for a much faster and more resilient response.
+* **Backend Workers:** A separate pool of workers would consume from this queue to create the DB entries and notify supervisors.
+* **Real Notifications:** The `print()` "text-back" simulation would be replaced with a real **Twilio** (SMS) or **Slack** API call.
 
-4. How to Scale from 10 to 1,000+ Requests/Day
-The current TinyDB (a single JSON file) is a clear bottleneck and would fail under concurrent writes. To handle real scale, I would make the following changes:
+### 5. System Modularization
 
-Database: Swap TinyDB for a production-grade database like DynamoDB or a managed PostgreSQL (AWS RDS).
+The project uses a clean **separation of concerns** via an API contract.
 
-Decouple with a Message Queue: This is the most important change. Instead of a direct HTTP call from the agent to the backend, the agent would just publish a message to a queue (like AWS SQS or RabbitMQ). This makes the agent's response instant ("I'll find out...") and makes the whole system more resilient.
+* **The Agent:** Manages real-time I/O (STT/TTS) and knows nothing about the backend's internal logic.
+* **The Backend:** Manages all business logic, data, and the UI.
 
-Backend Workers: A separate pool of auto-scaling workers would consume from this queue to create the DB entries and notify supervisors.
+This modularity ensures the backend is independent and could be connected to any agent (e.g., a Twilio bot) with no changes.
 
-Real Notifications: The print() "text-back" simulation would be replaced with a real Twilio (SMS) or Slack API call.
+---
 
-5. How the System is Modularized
-I was deliberate about separation of concerns. The system is split into two modules that communicate via a simple API contract.
+##  Future Improvements
 
-The Agent (The "Mouth and Ears"): Its only job is real-time I/O. It handles the LiveKit connection and the STT/TTS pipeline. It knows nothing about the database or the supervisor UI.
+Given more time, I would add the following features:
 
-The Backend (The "Brain"):Gpt-4o-mini-tts Its only job is business logic. It manages data, state, and the UI.
-
-This modularity is clean. We could swap the LiveKit agent for a Twilio bot tomorrow, and the backend wouldn't need to change at all.
-
-#Future Improvements
-If I had more time, here's what I would improve next:
-
-Smarter Matching: The current question.matches() is a basic string search. I'd upgrade this to a vector search (e.g., using sentence-transformers) for "fuzzy" semantic matching of user questions.
-
-Supervisor Auth: The admin panel is currently public. I would put this behind a simple login system.
-
-Real Callbacks: I'd replace the print() statement with a real webhook call to a service like Twilio to send an actual SMS to the caller_id.
-
-Phase 2: I would implement the "Phase 2" live-transfer logic, where the agent first checks a supervisor's availability (perhaps via a Redis key) before offering to transfer the call.
+* **Smarter Matching:** Upgrade the basic string search to a vector search (e.g., using `sentence-transformers`) for "fuzzy" semantic matching of user questions.
+* **Supervisor Auth:** Place the admin panel behind a proper login system.
+* **Real Callbacks:** Replace the `print()` statement with a real webhook call to a service like Twilio to send an actual SMS to the `caller_id`.
+* **Live Transfer:** Implement the "Phase 2" live-transfer logic, where the agent first checks a supervisor's availability (perhaps via a Redis key) before offering to transfer the call.
