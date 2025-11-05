@@ -10,18 +10,18 @@ This is a voice-only solution that uses OpenAI for speech-to-text and Silero for
 The system is built on three main components:
 
 1.  The Agent (`livekit/agent.py`): A fully voice-enabled LiveKit agent that handles real-time conversation using OpenAI STT and the free Silero TTS engine.
-2.  
+ 
 
-    ![FastAPI Backend Documentation](backend-demo.png.png)
+ ![FastAPI Backend Documentation](backend-demo.png.png)
     
     
-4.  The Backend (`backend/app.py`): FastAPI server that acts as the "brain," managing the knowledge base, request lifecycle (pending, resolved, timed-out), and serving the supervisor's admin panel.
-5.  
+2.The Backend (`backend/app.py`): FastAPI server that acts as the "brain," managing the knowledge base, request lifecycle (pending, resolved, timed-out), and serving the supervisor's admin panel.
+ 
 
-     ![LiveKit Agent Listening](agent-demo.png.png)
+   ![LiveKit Agent Listening](agent-demo.png.png)
     
 
-6.  The Database (`backend/data.json`): A simple `TinyDB` file used as a lightweight, zero-setup database for the `knowledge_base` and `requests` tables
+3.  The Database (`backend/data.json`): A simple `TinyDB` file used as a lightweight, zero-setup database for the `knowledge_base` and `requests` tables
 
 # Getting Started
 
